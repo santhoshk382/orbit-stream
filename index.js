@@ -1,11 +1,13 @@
 const { createClient } = require("./src/core/StreamFactory");
 
-const WebSocketServer = require("./src/websocket/WebSocketServer");
-
-const WebSocketClient = require("./src/websocket/WebSocketClient");
-
 module.exports = {
   createClient,
-  WebSocketServer,
-  WebSocketClient,
+
+  get WebSocketServer() {
+    return require("./src/websocket/WebSocketServer");
+  },
+
+  get WebSocketClient() {
+    return require("./src/websocket/WebSocketClient");
+  },
 };

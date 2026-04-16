@@ -3,10 +3,28 @@ const StreamClient = require("../core/StreamClient");
 const ConnectionManager = require("../core/ConnectionManager");
 
 class RabbitMQAdapter extends StreamClient {
+  constructor(config) {
+    super(config);
+
+    this.conn = null;
+
+    this.publishChannel = null;
+    this.consumeChannel = null;
+
+    this.connectionManager = null;
+    this._closing = false;
+
+    this.queues = new Set();
+  }
+
   async connect() {
+    if (this.conn) return;
+
     this._closing = false;
 
     this.connectionManager = new ConnectionManager(async () => {
+      if (this.conn) return;
+
       this.conn = await amqp.connect(this.config.url);
 
       this.conn.on("error", (err) => {
@@ -15,14 +33,23 @@ class RabbitMQAdapter extends StreamClient {
 
       this.conn.on("close", () => {
         this.connected = false;
-        if (!this._closing) this.connectionManager.scheduleReconnect();
+
+        this.conn = null;
+        this.publishChannel = null;
+        this.consumeChannel = null;
+
+        if (!this._closing) {
+          this.connectionManager.scheduleReconnect();
+        }
       });
 
-      // Use ConfirmChannel for guaranteed delivery
-      this.channel = await this.conn.createConfirmChannel();
+      // publisher channel (confirm)
+      this.publishChannel = await this.conn.createConfirmChannel();
 
-      // Optional: limit unacked messages per consumer
-      await this.channel.prefetch(this.config.prefetch || 100);
+      // consumer channel
+      this.consumeChannel = await this.conn.createChannel();
+
+      await this.consumeChannel.prefetch(this.config.prefetch || 100);
     }, this.config);
 
     this.connectionManager.on("connected", async () => {
@@ -35,9 +62,9 @@ class RabbitMQAdapter extends StreamClient {
       this.emit("connected");
     });
 
-    this.connectionManager.on("reconnecting", (delay) =>
-      this.emit("reconnecting", delay),
-    );
+    this.connectionManager.on("reconnecting", (delay) => {
+      this.emit("reconnecting", delay);
+    });
   }
 
   /* -------------------------------------------------- */
@@ -45,27 +72,27 @@ class RabbitMQAdapter extends StreamClient {
   /* -------------------------------------------------- */
 
   async _publishNow(queue, message) {
-    if (!this.connected) {
+    if (!this.connected || !this.publishChannel) {
       this._buffer(queue, message);
       return;
     }
 
     try {
-      await this.channel.assertQueue(queue, {
-        durable: true,
-      });
+      if (!this.queues.has(queue)) {
+        await this.publishChannel.assertQueue(queue, { durable: true });
+        this.queues.add(queue);
+      }
 
-      await this.channel.sendToQueue(
+      this.publishChannel.sendToQueue(
         queue,
         Buffer.from(JSON.stringify(message)),
         {
-          persistent: true, // survive broker restart
-        },
+          persistent: true,
+        }
       );
 
-      // Wait for broker confirmation
-      await this.channel.waitForConfirms();
-    } catch {
+      await this.publishChannel.waitForConfirms();
+    } catch (err) {
       this._buffer(queue, message);
     }
   }
@@ -85,30 +112,35 @@ class RabbitMQAdapter extends StreamClient {
   /* -------------------------------------------------- */
 
   async subscribe(queue, handler, restore = false) {
-    if (!this.connected || !this.channel) {
-      // Wait until connection is ready
+    if (!this.connected || !this.consumeChannel) {
       await new Promise((resolve) => this.once("connected", resolve));
     }
 
-    if (!restore) this.subscriptions.set(queue, handler);
+    if (!restore) {
+      this.subscriptions.set(queue, handler);
+    }
 
-    await this.channel.assertQueue(queue, {
-      durable: true,
-    });
+    if (!this.queues.has(queue)) {
+      await this.consumeChannel.assertQueue(queue, { durable: true });
+      this.queues.add(queue);
+    }
 
-    await this.channel.consume(
+    await this.consumeChannel.consume(
       queue,
       async (msg) => {
         if (!msg) return;
 
         try {
-          handler(JSON.parse(msg.content.toString()));
-          this.channel.ack(msg);
+          const data = JSON.parse(msg.content.toString());
+
+          await handler(data);
+
+          this.consumeChannel.ack(msg);
         } catch (err) {
-          this.channel.nack(msg, false, false);
+          this.consumeChannel.nack(msg, false, false);
         }
       },
-      { noAck: false },
+      { noAck: false }
     );
   }
 
@@ -119,9 +151,26 @@ class RabbitMQAdapter extends StreamClient {
   async close() {
     this._closing = true;
 
-    if (this.channel) await this.channel.close();
+    try {
+      if (this.publishChannel) {
+        await this.publishChannel.close();
+        this.publishChannel = null;
+      }
 
-    if (this.conn) await this.conn.close();
+      if (this.consumeChannel) {
+        await this.consumeChannel.close();
+        this.consumeChannel = null;
+      }
+
+      if (this.conn) {
+        await this.conn.close();
+        this.conn = null;
+      }
+    } catch (err) {
+      this.emit("error", err);
+    }
+
+    this.connected = false;
   }
 }
 
