@@ -1,12 +1,10 @@
 {
-  "name": "orbit-stream",
-  "version": "1.1.2",
+  "name": "@santhosh/orbit-stream",
+  "version": "1.1.1",
   "description": "Production-ready streaming library supporting Valkey, RabbitMQ, and WebSocket",
   "main": "index.js",
   "types": "index.d.ts",
-  "scripts": {
-    "test": "node examples/telemetry-consumer.js"
-  },
+  "scripts": {},
   "dependencies": {
     "ioredis": "^5.4.1",
     "amqplib": "^0.10.3",
@@ -22,5 +20,11 @@
     "telemetry"
   ],
   "author": "Santhosh Reddy Kanameni",
-  "license": "MIT"
+  "license": "MIT",
+  "directories": {},
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git@github-personal:santhoshk382/orbit-stream.git"
+  }
 }
