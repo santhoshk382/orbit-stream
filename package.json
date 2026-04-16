@@ -26,5 +26,11 @@
   "repository": {
     "type": "git",
     "url": "git@github-personal:santhoshk382/orbit-stream.git"
-  }
+  },
+  "files": [
+    "src",
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ]
 }

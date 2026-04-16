@@ -30,3 +30,7 @@ yarn-error.log*
 
 # ignore test folder
 .test/
+
+*.log
+orbit-buffer/
+*.tgz
