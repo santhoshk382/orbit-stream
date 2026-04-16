@@ -1,0 +1,26 @@
+{
+  "name": "orbit-stream",
+  "version": "1.0.0",
+  "description": "Production-ready streaming library supporting Valkey, RabbitMQ, and WebSocket",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "node examples/telemetry-consumer.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "amqplib": "^0.10.3",
+    "ws": "^8.16.0",
+    "uuid": "^9.0.1"
+  },
+  "keywords": [
+    "valkey",
+    "redis streams",
+    "rabbitmq",
+    "websocket",
+    "streaming",
+    "telemetry"
+  ],
+  "author": "Santhosh Reddy Kanameni",
+  "license": "MIT"
+}
